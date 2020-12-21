@@ -4,7 +4,9 @@ Time Lapse camera support for Duet based 3D printers.  Extending the work of Dan
 # FORK CHANGES
 - Added ability to capture from raspberry pi camera when it is already being used by another process (avoids ENOSPC errors)
   A new camera type *ffmpeg*.  Takes a url to identify the video stream (in the example it is stream.mjpg)
-  e.g.  /usr/bin/python3 <path>/DuetLapse.py -duet <ip address> -camera ffmpeg -weburl http://camera IP:port>/stream.mjpg -detect layer
+  
+  *e.g.  /usr/bin/python3 <path>/DuetLapse.py -duet <ip address> -camera ffmpeg -weburl http://camera IP:port>/stream.mjpg -detect layer*
+  
 - Added code to prevent two instances of DuetLapse.py running
  
 - Added support for sending SIGINT to the process id and gracefully stop (and create video) when DuetLapse.py is running in the background (CTL+C cannot so this)
