@@ -13,10 +13,21 @@
 # The Duet printer must be RepRap firmware V2 or V3 and must be network reachable. 
 #
 
+#Extensions by stuartofmt under the same terms as the original
+
 import subprocess
 import sys
 import argparse
 import time
+
+# stuartofmt - Added to stop multiple instances running assumed running under python3
+import psutil
+ 
+procs = [p for p in psutil.process_iter() if 'python3' in p.name() and __file__ in p.cmdline()]
+if len(procs) > 1:
+    print('Process is already running...')
+    sys.exit(1)
+
 try: 
     import DuetWebAPI as DWA
 except ImportError:
@@ -50,7 +61,7 @@ def init():
     # parse command line arguments
     parser = argparse.ArgumentParser(description='Program to create time lapse video from camera pointed at Duet3D based printer.', allow_abbrev=False)
     parser.add_argument('-duet',type=str,nargs=1,default=['localhost'],help='Name or IP address of Duet printer.')
-    parser.add_argument('-camera',type=str,nargs=1,choices=['usb','pi','web','dslr'],default=['usb'])
+    parser.add_argument('-camera',type=str,nargs=1,choices=['usb','pi','ffmpeg','web','dslr'],default=['usb'])
     parser.add_argument('-seconds',type=float,nargs=1,default=[0])
     parser.add_argument('-detect',type=str,nargs=1,choices= ['layer', 'pause', 'none'],default=['layer'])
     parser.add_argument('-pause',type=str,nargs=1,choices= ['yes', 'no'],default=['no'])
@@ -137,7 +148,13 @@ def init():
             print("Module 'raspistill' is required. ")
             print("Obtain via 'sudo apt install raspistill'")
             exit(2)
-
+            
+    if ('ffmpeg' in camera):
+        if (20 > len(subprocess.check_output('whereis ffmpeg', shell=True))):
+            print("Module 'ffmpeg' is required. ")
+            print("Obtain via 'sudo apt install ffmpeg'")
+            exit(2)
+            
     if ('web' in camera):
         if (20 > len(subprocess.check_output('whereis wget', shell=True))):
             print("Module 'wget' is required. ")
@@ -220,6 +237,11 @@ def onePhoto():
             cmd = 'raspistill -t 1 -ex sports -mm matrix -n -o '+fn
         else:
             cmd = 'raspistill  '+camparms+' -o '+fn
+    if ('ffmpeg' in camera): 
+        if (camparms == ''):
+            cmd = 'ffmpeg -y -i ' +weburl+ ' -vframes 1 ' +fn
+        else:
+            cmd = 'ffmpeg '+camparms+' '+weburl+ ' -vframes 1 ' +fn
     if ('web' in camera): 
         if (camparms == ''):
             cmd = 'wget --auth-no-challenge -nv -O '+fn+' "'+weburl+'" '
@@ -294,6 +316,19 @@ print('')
 
 
 timePriorPhoto = time.time()
+
+#stuartof mt - Allows process running in background or foreground to be gracefully
+# shutdown with SIGINT (kill -2 <pid>
+import signal
+
+def quit_gracefully(*args):
+    print('Stopped by SIGINT - Post Processing')
+    postProcess()
+    exit(0);
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, quit_gracefully)
+
 
 try: 
     while(1):
