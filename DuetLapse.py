@@ -13,20 +13,20 @@
 # The Duet printer must be RepRap firmware V2 or V3 and must be network reachable. 
 #
 
-#Extensions by stuartofmt under the same terms as the original
-
 import subprocess
 import sys
 import argparse
 import time
 
-# stuartofmt - Added to stop multiple instances running assumed running under python3
+# Added to stop multipleinstances running
 import psutil
  
 procs = [p for p in psutil.process_iter() if 'python3' in p.name() and __file__ in p.cmdline()]
 if len(procs) > 1:
     print('Process is already running...')
     sys.exit(1)
+ 
+#DuetLapse Code starts here
 
 try: 
     import DuetWebAPI as DWA
@@ -67,8 +67,10 @@ def init():
     parser.add_argument('-pause',type=str,nargs=1,choices= ['yes', 'no'],default=['no'])
     parser.add_argument('-movehead',type=float,nargs=2,default=[0.0,0.0])
     parser.add_argument('-weburl',type=str,nargs=1,default=[''])
-    #parser.add_argument('--', '-camparm',type=str,nargs=argparse.REMAINDER,default=[''], dest='camparm', help='Extra parms to pass to fswebcam, raspistill, or wget.  Must come last. ')
+    parser.add_argument('-basedir',type=str,nargs=1,default=['~'])
+    parser.add_argument('-extratime',type=float,nargs=1,default=[0])
     parser.add_argument('-dontwait',action='store_true',help='Capture images immediately.')
+    #parser.add_argument('--', '-camparm',type=str,nargs=argparse.REMAINDER,default=[''], dest='camparm', help='Extra parms to pass to fswebcam, raspistill, or wget.  Must come last. ')
     subparsers = parser.add_subparsers(title='subcommands',help='DuetLapse camparms -h  or vidparms -h for more help')
     pcamparm   = subparsers.add_parser('camparms',description='camparm -parms xxx where xxx is passed to fswebcam, raspistill, or wget.')
     pcamparm.add_argument('--','-parms', type=str,nargs=argparse.REMAINDER,default=[''], dest='camparms', help='Extra parms to pass to fswebcam, raspistill, or wget.')
@@ -76,7 +78,7 @@ def init():
     pcamparm.add_argument('--','-parms', type=str,nargs=argparse.REMAINDER,default=[''], dest='vidparms', help='Extra parms to pass to fswebcam, raspistill, or wget.')
     args=vars(parser.parse_args())
 
-    global duet, camera, seconds, detect, pause, movehead, weburl, dontwait, camparms, vidparms
+    global duet, camera, seconds, detect, pause, movehead, weburl, basedir, extratime, dontwait, camparms, vidparms
     duet     = args['duet'][0]
     camera   = args['camera'][0]
     seconds  = args['seconds'][0]
@@ -84,6 +86,8 @@ def init():
     pause    = args['pause'][0]
     movehead = args['movehead']
     weburl   = args['weburl'][0]
+    basedir  = args['basedir'] [0]
+    extratime = str(args['extratime'] [0])
     dontwait = args['dontwait']
     camparms = ['']
     if ('camparms' in args.keys()): camparms = args['camparms']
@@ -148,13 +152,13 @@ def init():
             print("Module 'raspistill' is required. ")
             print("Obtain via 'sudo apt install raspistill'")
             exit(2)
-            
+
     if ('ffmpeg' in camera):
         if (20 > len(subprocess.check_output('whereis ffmpeg', shell=True))):
             print("Module 'ffmpeg' is required. ")
             print("Obtain via 'sudo apt install ffmpeg'")
             exit(2)
-            
+
     if ('web' in camera):
         if (20 > len(subprocess.check_output('whereis wget', shell=True))):
             print("Module 'wget' is required. ")
@@ -180,18 +184,20 @@ def init():
 
     # Tell user options in use. 
     print()
-    print("##################################")
-    print("# Options in force for this run: #")
-    print("# camera   = {0:20s}#".format(camera))
-    print("# printer  = {0:20s}#".format(duet))
-    print("# seconds  = {0:20s}#".format(str(seconds)))
-    print("# detect   = {0:20s}#".format(detect))
-    print("# pause    = {0:20s}#".format(pause))
-    print("# camparms = {0:20s}#".format(camparms))
-    print("# vidparms = {0:20s}#".format(vidparms))
-    print("# movehead = {0:6.2f} {1:6.2f}       #".format(movehead[0],movehead[1]))
-    print("# dontwait = {0:20s}#".format(str(dontwait)))
-    print("##################################")
+    print("#####################################")
+    print("# Options in force for this run:    #")
+    print("# camera      = {0:20s}#".format(camera))
+    print("# printer     = {0:20s}#".format(duet))
+    print("# seconds     = {0:20s}#".format(str(seconds)))
+    print("# detect      = {0:20s}#".format(detect))
+    print("# pause       = {0:20s}#".format(pause))
+    print("# camparms    = {0:20s}#".format(camparms))
+    print("# vidparms    = {0:20s}#".format(vidparms))
+    print("# movehead    = {0:6.2f} {1:6.2f}       #".format(movehead[0],movehead[1]))
+    print("# dontwait    = {0:20s}#".format(str(dontwait)))
+    print("# basedir     = {0:20s}#".format(basedir))
+    print("# extratime   = {0:20s}#".format(extratime))
+    print("#####################################")
     print()
 
     # Clean up directory from past runs.  Be silent if it does not exist. 
@@ -242,6 +248,7 @@ def onePhoto():
             cmd = 'ffmpeg -y -i ' +weburl+ ' -vframes 1 ' +fn
         else:
             cmd = 'ffmpeg '+camparms+' '+weburl+ ' -vframes 1 ' +fn
+
     if ('web' in camera): 
         if (camparms == ''):
             cmd = 'wget --auth-no-challenge -nv -O '+fn+' "'+weburl+'" '
@@ -287,16 +294,23 @@ def postProcess():
     print()
     print("Now making {0:d} frames into a video at 10 frames per second.".format(int(np.around(frame))))
     if (250 < frame): print("This can take a while...")
-    fn ='~/DuetLapse'+time.strftime('%m%d%y%H%M',time.localtime())+'.mp4'
+#    fn = basedir+'/DuetLapse'+time.strftime('%m%d%y%H%M',time.localtime())+'.mp4'
+    fn = basedir+'/DuetLapse-'+time.strftime('%a-%H:%M',time.localtime())+'.mp4'
     if (vidparms == ''):
-        cmd  = 'ffmpeg -r 10 -i /tmp/DuetLapse/IMG%08d.jpeg -vcodec libx264 -y -v 8 '+fn
+         if extratime == '0':
+              cmd  = 'ffmpeg -r 10 -i /tmp/DuetLapse/IMG%08d.jpeg -vcodec libx264 -y -v 8 '+fn
+         else:
+              cmd  = 'ffmpeg -r 10 -i /tmp/DuetLapse/IMG%08d.jpeg -c:v libx264 -vf tpad=stop_mode=clone:stop_duration='+extratime+',fps=10 '+fn
     else:
-        cmd  = 'ffmpeg '+vidparms+' -i /tmp/DuetLapse/IMG%08d.jpeg '+fn
+         if extratime == '0':
+              cmd  = 'ffmpeg '+vidparms+' -i /tmp/DuetLapse/IMG%08d.jpeg '+fn 
+         else:
+              cmd  = 'ffmpeg '+vidparms+' -i /tmp/DuetLapse/IMG%08d.jpeg -c:v libx264 -vf tpad=stop_mode=clone:stop_duration='+extratime+',fps=10 '+fn
+        
     subprocess.call(cmd, shell=True)
     print('Video processing complete.')
-    print('Video file is in home directory, named '+fn)
+    print('Video is in file '+fn)
     exit()    
-
 
 ###########################
 # Main begins here
@@ -317,7 +331,7 @@ print('')
 
 timePriorPhoto = time.time()
 
-#stuartof mt - Allows process running in background or foreground to be gracefully
+#Allows process running in background or foreground to be gracefully
 # shutdown with SIGINT (kill -2 <pid>
 import signal
 
@@ -328,7 +342,6 @@ def quit_gracefully(*args):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, quit_gracefully)
-
 
 try: 
     while(1):
@@ -350,7 +363,13 @@ try:
             if ('idle' in status):
                 printerState = 2
 
-        elif (printerState == 2): 
+        elif (printerState == 2):
+#            time.sleep(1)
+#            onePhoto()
+#            time.sleep(2)
+#            onePhoto()
             postProcess()
 except KeyboardInterrupt:
-    postProcess()    
+    print('Stopped by Ctl+C - Post Processing')
+    postProcess()
+   
