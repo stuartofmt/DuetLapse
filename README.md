@@ -11,6 +11,10 @@ Time Lapse camera support for Duet based 3D printers.  Extending the work of Dan
  
 - Added support for sending SIGINT to the process id and gracefully stop (and create video) when DuetLapse.py is running in the background (CTL+C cannot so this)
   e.g. kill -2 <pid>
+  
+ - Added configurable directory for the resultant video.   -basedir  <absolute path no trailing / >  the default is ~
+ 
+ - Added ability to extend the end of the video by repeating the last frame -extratime n in seconds default is 0
  
 # ORIGINAL follows
 
