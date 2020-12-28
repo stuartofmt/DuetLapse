@@ -13,8 +13,13 @@ Time Lapse camera support for Duet based 3D printers.  Extending the work of Dan
   e.g. kill -2 <pid>
   
  - Added configurable directory for the resultant video.   -basedir  <absolute path without trailing / >  the default is ~
+ e.g. -basedir /home/pi/Lapse
  
  - Added ability to extend the end of the video by repeating the last frame -extratime n in seconds default is 0
+ 
+ - Changed from print commands to logging option   -logtype [console, file, both] default is both. If console then only written to the console. If file or both then a logfile is written to basedir with the name DuelLapse.log  If both then written to the console and the logfile.  Messages are prefixed by the ip address set by -duet.  This is to distinguish between printers if multiple are used (see also -instances (below) 
+ 
+ - added a switch for inhibiting multiple instances -instances [single, oneip, many] default is single.  If single then the highlander principle applies. If oneip then only one instance per duet ip address (set by the -duet ip address).  If many then it's the wild west.
  
 # ORIGINAL follows
 
