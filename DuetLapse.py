@@ -73,7 +73,7 @@ def init():
     pcamparm.add_argument('--','-parms', type=str,nargs=argparse.REMAINDER,default=[''], dest='vidparms', help='Extra parms to pass to fswebcam, raspistill, or wget.')
     args=vars(parser.parse_args())
 
-    global duet, camera, seconds, detect, pause, movehead, weburl, basedir, extratime, dontwait, camparms, vidparms
+    global duet, camera, seconds, detect, pause, movehead, weburl, basedir, extratime, instances, logtype, dontwait, camparms, vidparms
     duet     = args['duet'][0]
     camera   = args['camera'][0]
     seconds  = args['seconds'][0]
@@ -129,9 +129,9 @@ def init():
    
     if ('file' in logtype or 'both' in logtype) :
         if (proccount > 1):
-             f_handler = logging.FileHandler('DuetLapse.log', mode='a')
+             f_handler = logging.FileHandler(basedir+'/DuetLapse.log', mode='a')
         else:
-             f_handler = logging.FileHandler('DuetLapse.log', mode='w')        
+             f_handler = logging.FileHandler(basedir+'/DuetLapse.log', mode='w')        
 
         f_format = logging.Formatter(duet+' - %(asctime)s - %(message)s')
         f_handler.setFormatter(f_format)
