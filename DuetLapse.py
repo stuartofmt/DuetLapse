@@ -27,7 +27,7 @@ except ImportError:
     logger.info("Python Library Module 'DuetWebAPI.py' is required. ")
     logger.info("Obtain from https://github.com/DanalEstes/DuetWebAPI ")
     logger.info("Place in same directory as script, or in Python libpath.")
-    exit(2)
+    sys.exit(2)
 
 try: 
     import numpy as np
@@ -35,7 +35,7 @@ except ImportError:
     logger.info("Python Library Module 'numpy' is required. ")
     logger.info("Obtain via 'sudo python3 -m pip install numpy'")
     logger.info("Obtain pip via 'sudo apt install python-pip'")
-    exit(2)
+    sys.exit(2)
 
 
 # Globals.
@@ -141,7 +141,7 @@ def init():
     # Warn user if we havent' implemented something yet. 
     if ('dlsr' in camera):
         logger.info('DuetLapse.py: error: Camera type '+camera+' not yet supported.')
-        exit(2)
+        sys.exit(2)
 
     # Inform regarding valid and invalid combinations
     if ((seconds > 0) and (not 'none' in detect)):
@@ -150,13 +150,13 @@ def init():
 
     if ((not movehead == [0.0,0.0]) and ((not 'yes' in pause) and (not 'pause' in detect))):
         logger.info('Invalid Combination: "-movehead {0:1.2f} {1:1.2f}" requires either "-pause yes" or "-detect pause".'.format(movehead[0],movehead[1]))
-        exit(2)
+        sys.exit(2)
 
     if (('yes' in pause) and ('pause' in detect)):
         logger.info('Invalid Combination: "-pause yes" causes this script to pause printer when')
         logger.info('other events are detected, and "-detect pause" requires the gcode on the printer')
         logger.info('contain its own pauses.  These are fundamentally incompatible.')
-        exit(2)
+        sys.exit(2)
 
     if ('pause' in detect):
         logger.info('************************************************************************************')
@@ -187,30 +187,30 @@ def init():
         if (20 > len(subprocess.check_output('whereis fswebcam', shell=True))):
             logger.info("Module 'fswebcam' is required. ")
             logger.info("Obtain via 'sudo apt install fswebcam'")
-            exit(2)
+            sys.exit(2)
 
     if ('pi' in camera):
         if (20 > len(subprocess.check_output('whereis raspistill', shell=True))):
             logger.info("Module 'raspistill' is required. ")
             logger.info("Obtain via 'sudo apt install raspistill'")
-            exit(2)
+            sys.exit(2)
 
     if ('ffmpeg' in camera):
         if (20 > len(subprocess.check_output('whereis ffmpeg', shell=True))):
             logger.info("Module 'ffmpeg' is required. ")
             logger.info("Obtain via 'sudo apt install ffmpeg'")
-            exit(2)
+            sys.exit(2)
 
     if ('web' in camera):
         if (20 > len(subprocess.check_output('whereis wget', shell=True))):
             logger.info("Module 'wget' is required. ")
             logger.info("Obtain via 'sudo apt install wget'")
-            exit(2)
+            sys.exit(2)
 
     if (20 > len(subprocess.check_output('whereis ffmpeg', shell=True))):
         logger.info("Module 'ffmpeg' is required. ")
         logger.info("Obtain via 'sudo apt install ffmpeg'")
-        exit(2)
+        sys.exit(2)
 
 
 
@@ -222,7 +222,7 @@ def init():
     printer = DWA.DuetWebAPI('http://'+duet)
     if (not printer.printerType()):
         logger.info('Device at '+duet+' either did not respond or is not a Duet V2 or V3 printer.')
-        exit(2)
+        sys.exit(2)
     printer = DWA.DuetWebAPI('http://'+duet)
 
     logger.info("Connected to a Duet V"+str(printer.printerType())+" printer at "+printer.baseURL())
@@ -355,7 +355,7 @@ def postProcess():
     subprocess.call(cmd, shell=True)
     logger.info('Video processing complete.')
     logger.info('Video is in file '+fn)
-    exit()    
+    sys.exit(0)    
 
 ###########################
 # Main begins here
@@ -383,7 +383,7 @@ import signal
 def quit_gracefully(*args):
     logger.info('Stopped by SIGINT - Post Processing')
     postProcess()
-    exit(0);
+    sys.exit(0);
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, quit_gracefully)
