@@ -18,30 +18,23 @@ import sys
 import argparse
 import time
 
-# Added to stop multipleinstances running
-import psutil
- 
-procs = [p for p in psutil.process_iter() if 'python3' in p.name() and __file__ in p.cmdline()]
-if len(procs) > 1:
-    print('Process is already running...')
-    sys.exit(1)
  
 #DuetLapse Code starts here
 
 try: 
     import DuetWebAPI as DWA
 except ImportError:
-    print("Python Library Module 'DuetWebAPI.py' is required. ")
-    print("Obtain from https://github.com/DanalEstes/DuetWebAPI ")
-    print("Place in same directory as script, or in Python libpath.")
+    logger.info("Python Library Module 'DuetWebAPI.py' is required. ")
+    logger.info("Obtain from https://github.com/DanalEstes/DuetWebAPI ")
+    logger.info("Place in same directory as script, or in Python libpath.")
     exit(2)
 
 try: 
     import numpy as np
 except ImportError:
-    print("Python Library Module 'numpy' is required. ")
-    print("Obtain via 'sudo python3 -m pip install numpy'")
-    print("Obtain pip via 'sudo apt install python-pip'")
+    logger.info("Python Library Module 'numpy' is required. ")
+    logger.info("Obtain via 'sudo python3 -m pip install numpy'")
+    logger.info("Obtain pip via 'sudo apt install python-pip'")
     exit(2)
 
 
@@ -69,6 +62,8 @@ def init():
     parser.add_argument('-weburl',type=str,nargs=1,default=[''])
     parser.add_argument('-basedir',type=str,nargs=1,default=['~'])
     parser.add_argument('-extratime',type=float,nargs=1,default=[0])
+    parser.add_argument('-instances',type=str,nargs=1,choices=['single','oneip','many'],default=['single'])
+    parser.add_argument('-logtype',type=str,nargs=1,choices=['console','file','both'],default=['both'])
     parser.add_argument('-dontwait',action='store_true',help='Capture images immediately.')
     #parser.add_argument('--', '-camparm',type=str,nargs=argparse.REMAINDER,default=[''], dest='camparm', help='Extra parms to pass to fswebcam, raspistill, or wget.  Must come last. ')
     subparsers = parser.add_subparsers(title='subcommands',help='DuetLapse camparms -h  or vidparms -h for more help')
@@ -88,6 +83,8 @@ def init():
     weburl   = args['weburl'][0]
     basedir  = args['basedir'] [0]
     extratime = str(args['extratime'] [0])
+    instances = args['instances'] [0]
+    logtype   = args['logtype'] [0]
     dontwait = args['dontwait']
     camparms = ['']
     if ('camparms' in args.keys()): camparms = args['camparms']
@@ -95,110 +92,158 @@ def init():
     vidparms = ['']
     if ('vidparms' in args.keys()): vidparms = args['vidparms']
     vidparms = ' '.join(vidparms)
+    
+ #Check to see if this instance is allowed to run 
+ 
+    proccount = 0
+    allowed = 0
+       
+    # Check to see if multiple instances allowed
+    import psutil
+    for p in psutil.process_iter():      
+         if 'python3' in p.name() and __file__ in p.cmdline():
+              proccount += 1
+              if ('single' in instances):
+                   allowed += 1
+              if ('oneip' in instances):
+                   if duet in p.cmdline():
+                        allowed += 1
+       
+    if (allowed > 1):
+           print('Process is already running...')
+           sys.exit(1)          
+    
+# Create a custom logger
+    import logging
+    global logger
+    logger = logging.getLogger('DuetLapse')
+    logger.setLevel(logging.DEBUG)
+
+# Create handlers and formats
+    if ('console' in logtype or 'both' in logtype) : 
+        c_handler = logging.StreamHandler()
+        c_format = logging.Formatter(duet+' %(message)s')
+        c_handler.setFormatter(c_format)
+        logger.addHandler(c_handler)
+   
+   
+    if ('file' in logtype or 'both' in logtype) :
+        if (proccount > 1):
+             f_handler = logging.FileHandler('DuetLapse.log', mode='a')
+        else:
+             f_handler = logging.FileHandler('DuetLapse.log', mode='w')        
+
+        f_format = logging.Formatter(duet+' - %(asctime)s - %(message)s')
+        f_handler.setFormatter(f_format)
+        logger.addHandler(f_handler)
+   
 
     # Warn user if we havent' implemented something yet. 
     if ('dlsr' in camera):
-        print('DuetLapse.py: error: Camera type '+camera+' not yet supported.')
+        logger.info('DuetLapse.py: error: Camera type '+camera+' not yet supported.')
         exit(2)
 
     # Inform regarding valid and invalid combinations
     if ((seconds > 0) and (not 'none' in detect)):
-        print('Warning: -seconds '+str(seconds)+' and -detect '+detect+' will trigger on both.')
-        print('Specify "-detect none" with "-seconds" to trigger on seconds alone.')
+        logger.info('Warning: -seconds '+str(seconds)+' and -detect '+detect+' will trigger on both.')
+        logger.info('Specify "-detect none" with "-seconds" to trigger on seconds alone.')
 
     if ((not movehead == [0.0,0.0]) and ((not 'yes' in pause) and (not 'pause' in detect))):
-        print('Invalid Combination: "-movehead {0:1.2f} {1:1.2f}" requires either "-pause yes" or "-detect pause".'.format(movehead[0],movehead[1]))
+        logger.info('Invalid Combination: "-movehead {0:1.2f} {1:1.2f}" requires either "-pause yes" or "-detect pause".'.format(movehead[0],movehead[1]))
         exit(2)
 
     if (('yes' in pause) and ('pause' in detect)):
-        print('Invalid Combination: "-pause yes" causes this script to pause printer when')
-        print('other events are detected, and "-detect pause" requires the gcode on the printer')
-        print('contain its own pauses.  These are fundamentally incompatible.')
+        logger.info('Invalid Combination: "-pause yes" causes this script to pause printer when')
+        logger.info('other events are detected, and "-detect pause" requires the gcode on the printer')
+        logger.info('contain its own pauses.  These are fundamentally incompatible.')
         exit(2)
 
     if ('pause' in detect):
-        print('************************************************************************************')
-        print('* Note "-detect pause" means that the G-Code on the printer already contains pauses,')
-        print('* and that this script will detect them, take a photo, and issue a resume.')
-        print('* Head position during those pauses is can be controlled by the pause.g macro ')
-        print('* on the duet, or by specifying "-movehead nnn nnn".')
-        print('*')
-        print('* If instead, it is desired that this script force the printer to pause with no')
-        print('* pauses in the gcode, specify either:')
-        print('* "-pause yes -detect layer" or "-pause yes -seconds nnn".')
-        print('************************************************************************************')
+        logger.info('************************************************************************************')
+        logger.info('* Note "-detect pause" means that the G-Code on the printer already contains pauses,')
+        logger.info('* and that this script will detect them, take a photo, and issue a resume.')
+        logger.info('* Head position during those pauses is can be controlled by the pause.g macro ')
+        logger.info('* on the duet, or by specifying "-movehead nnn nnn".')
+        logger.info('*')
+        logger.info('* If instead, it is desired that this script force the printer to pause with no')
+        logger.info('* pauses in the gcode, specify either:')
+        logger.info('* "-pause yes -detect layer" or "-pause yes -seconds nnn".')
+        logger.info('************************************************************************************')
 
 
     if ('yes' in pause):
-        print('************************************************************************************')
-        print('* Note "-pause yes" means this script will pause the printer when the -detect or ')
-        print('* -seconds flags trigger.')
-        print('*')
-        print('* If instead, it is desired that this script detect pauses that are already in')
-        print('* in the gcode, specify:')
-        print('* "-detect pause"')
-        print('************************************************************************************')
+        logger.info('************************************************************************************')
+        logger.info('* Note "-pause yes" means this script will pause the printer when the -detect or ')
+        logger.info('* -seconds flags trigger.')
+        logger.info('*')
+        logger.info('* If instead, it is desired that this script detect pauses that are already in')
+        logger.info('* in the gcode, specify:')
+        logger.info('* "-detect pause"')
+        logger.info('************************************************************************************')
 
-
+        
     # Check for requsite commands
     if ('usb' in camera):
         if (20 > len(subprocess.check_output('whereis fswebcam', shell=True))):
-            print("Module 'fswebcam' is required. ")
-            print("Obtain via 'sudo apt install fswebcam'")
+            logger.info("Module 'fswebcam' is required. ")
+            logger.info("Obtain via 'sudo apt install fswebcam'")
             exit(2)
 
     if ('pi' in camera):
         if (20 > len(subprocess.check_output('whereis raspistill', shell=True))):
-            print("Module 'raspistill' is required. ")
-            print("Obtain via 'sudo apt install raspistill'")
+            logger.info("Module 'raspistill' is required. ")
+            logger.info("Obtain via 'sudo apt install raspistill'")
             exit(2)
 
     if ('ffmpeg' in camera):
         if (20 > len(subprocess.check_output('whereis ffmpeg', shell=True))):
-            print("Module 'ffmpeg' is required. ")
-            print("Obtain via 'sudo apt install ffmpeg'")
+            logger.info("Module 'ffmpeg' is required. ")
+            logger.info("Obtain via 'sudo apt install ffmpeg'")
             exit(2)
 
     if ('web' in camera):
         if (20 > len(subprocess.check_output('whereis wget', shell=True))):
-            print("Module 'wget' is required. ")
-            print("Obtain via 'sudo apt install wget'")
+            logger.info("Module 'wget' is required. ")
+            logger.info("Obtain via 'sudo apt install wget'")
             exit(2)
 
     if (20 > len(subprocess.check_output('whereis ffmpeg', shell=True))):
-        print("Module 'ffmpeg' is required. ")
-        print("Obtain via 'sudo apt install ffmpeg'")
+        logger.info("Module 'ffmpeg' is required. ")
+        logger.info("Obtain via 'sudo apt install ffmpeg'")
         exit(2)
+
+
+
 
     # Get connected to the printer.
 
-    print('Attempting to connect to printer at '+duet)
+    logger.info('Attempting to connect to printer at '+duet)
     global printer
     printer = DWA.DuetWebAPI('http://'+duet)
     if (not printer.printerType()):
-        print('Device at '+duet+' either did not respond or is not a Duet V2 or V3 printer.')
+        logger.info('Device at '+duet+' either did not respond or is not a Duet V2 or V3 printer.')
         exit(2)
     printer = DWA.DuetWebAPI('http://'+duet)
 
-    print("Connected to a Duet V"+str(printer.printerType())+" printer at "+printer.baseURL())
+    logger.info("Connected to a Duet V"+str(printer.printerType())+" printer at "+printer.baseURL())
 
     # Tell user options in use. 
-    print()
-    print("#####################################")
-    print("# Options in force for this run:    #")
-    print("# camera      = {0:20s}#".format(camera))
-    print("# printer     = {0:20s}#".format(duet))
-    print("# seconds     = {0:20s}#".format(str(seconds)))
-    print("# detect      = {0:20s}#".format(detect))
-    print("# pause       = {0:20s}#".format(pause))
-    print("# camparms    = {0:20s}#".format(camparms))
-    print("# vidparms    = {0:20s}#".format(vidparms))
-    print("# movehead    = {0:6.2f} {1:6.2f}       #".format(movehead[0],movehead[1]))
-    print("# dontwait    = {0:20s}#".format(str(dontwait)))
-    print("# basedir     = {0:20s}#".format(basedir))
-    print("# extratime   = {0:20s}#".format(extratime))
-    print("#####################################")
-    print()
+    logger.info('')
+    logger.info("#####################################")
+    logger.info("# Options in force for this run:    #")
+    logger.info("# camera      = {0:20s}#".format(camera))
+    logger.info("# printer     = {0:20s}#".format(duet))
+    logger.info("# seconds     = {0:20s}#".format(str(seconds)))
+    logger.info("# detect      = {0:20s}#".format(detect))
+    logger.info("# pause       = {0:20s}#".format(pause))
+    logger.info("# camparms    = {0:20s}#".format(camparms))
+    logger.info("# vidparms    = {0:20s}#".format(vidparms))
+    logger.info("# movehead    = {0:6.2f} {1:6.2f}       #".format(movehead[0],movehead[1]))
+    logger.info("# dontwait    = {0:20s}#".format(str(dontwait)))
+    logger.info("# basedir     = {0:20s}#".format(basedir))
+    logger.info("# extratime   = {0:20s}#".format(extratime))
+    logger.info("#####################################")
+    logger.info('')
 
     # Clean up directory from past runs.  Be silent if it does not exist. 
     subprocess.call('rm -r /tmp/DuetLapse > /dev/null 2>&1', shell=True)
@@ -212,19 +257,19 @@ def checkForcePause():
     global alreadyPaused
     if (alreadyPaused): return
     if (not 'yes' in pause): return
-    print('Requesting pause via M25')
+    logger.info('Requesting pause via M25')
     printer.gCode('M25')    # Ask for a pause
     printer.gCode('M400')   # Make sure the pause finishes
     alreadyPaused = True 
     if(not movehead == [0.0,0.0]):
-        print('Moving print head to X{0:4.2f} Y{1:4.2f}'.format(movehead[0],movehead[1]))
+        logger.info('Moving print head to X{0:4.2f} Y{1:4.2f}'.format(movehead[0],movehead[1]))
         printer.gCode('G1 X{0:4.2f} Y{1:4.2f}'.format(movehead[0],movehead[1]))
         printer.gCode('M400')   # Make sure the move finishes
 
 def unPause():
     global alreadyPaused
     if (alreadyPaused):
-        print('Requesting un pause via M24')
+        logger.info('Requesting un pause via M24')
         printer.gCode('M24')
 
 def onePhoto():
@@ -269,7 +314,7 @@ def oneInterval():
         if (not zn == zo):
             # Layer changed, take a picture.
             checkForcePause()
-            print('Capturing frame {0:5d} at X{1:4.2f} Y{2:4.2f} Z{3:4.2f} Layer {4:d}'.format(int(np.around(frame)),printer.getCoords()['X'],printer.getCoords()['Y'],printer.getCoords()['Z'],zn))
+            logger.info('Capturing frame {0:5d} at X{1:4.2f} Y{2:4.2f} Z{3:4.2f} Layer {4:d}'.format(int(np.around(frame)),printer.getCoords()['X'],printer.getCoords()['Y'],printer.getCoords()['Z'],zn))
             onePhoto()
         zo = zn
     global timePriorPhoto
@@ -277,12 +322,12 @@ def oneInterval():
 
     if ((seconds) and (seconds < elap)):
         checkForcePause()
-        print('Capturing frame {0:5d} after {1:4.2f} seconds elapsed.'.format(int(np.around(frame)),elap))
+        logger.info('Capturing frame {0:5d} after {1:4.2f} seconds elapsed.'.format(int(np.around(frame)),elap))
         onePhoto()
 
     if (('pause' in detect) and ('paused' in printer.getStatus()) and not alreadyPaused):
             alreadyPaused = True
-            print('Pause Detected, capturing frame {0:5d}'.format(int(np.around(frame)),elap))
+            logger.info('Pause Detected, capturing frame {0:5d}'.format(int(np.around(frame)),elap))
             onePhoto()
             unPause()   
 
@@ -291,9 +336,9 @@ def oneInterval():
          
 
 def postProcess():
-    print()
-    print("Now making {0:d} frames into a video at 10 frames per second.".format(int(np.around(frame))))
-    if (250 < frame): print("This can take a while...")
+    logger.info('')
+    logger.info("Now making {0:d} frames into a video at 10 frames per second.".format(int(np.around(frame))))
+    if (250 < frame): logger.info("This can take a while...")
 #    fn = basedir+'/DuetLapse'+time.strftime('%m%d%y%H%M',time.localtime())+'.mp4'
     fn = basedir+'/DuetLapse-'+time.strftime('%a-%H:%M',time.localtime())+'.mp4'
     if (vidparms == ''):
@@ -308,8 +353,8 @@ def postProcess():
               cmd  = 'ffmpeg '+vidparms+' -i /tmp/DuetLapse/IMG%08d.jpeg -c:v libx264 -vf tpad=stop_mode=clone:stop_duration='+extratime+',fps=10 '+fn
         
     subprocess.call(cmd, shell=True)
-    print('Video processing complete.')
-    print('Video is in file '+fn)
+    logger.info('Video processing complete.')
+    logger.info('Video is in file '+fn)
     exit()    
 
 ###########################
@@ -318,15 +363,15 @@ def postProcess():
 init()
     
 if (dontwait):
-    print('Not Waiting for print to start on printer '+duet)
-    print('Will take pictures from now until a print starts, ')
-    print('  continue to take pictures throughout printing, ')
+    logger.info('Not Waiting for print to start on printer '+duet)
+    logger.info('Will take pictures from now until a print starts, ')
+    logger.info('  continue to take pictures throughout printing, ')
 else:
-    print('Waiting for print to start on printer '+duet)
-    print('Will take pictures when printing starts, ')
-print('  and make video when printing ends.')
-print('Or, press Ctrl+C one time to move directly to conversion step.')
-print('')
+    logger.info('Waiting for print to start on printer '+duet)
+    logger.info('Will take pictures when printing starts, ')
+logger.info('  and make video when printing ends.')
+logger.info('Or, press Ctrl+C one time to move directly to conversion step.')
+logger.info('')
 
 
 timePriorPhoto = time.time()
@@ -336,7 +381,7 @@ timePriorPhoto = time.time()
 import signal
 
 def quit_gracefully(*args):
-    print('Stopped by SIGINT - Post Processing')
+    logger.info('Stopped by SIGINT - Post Processing')
     postProcess()
     exit(0);
 
@@ -352,10 +397,10 @@ try:
             if (dontwait):
                 oneInterval()
             if ('processing' in status):
-                print('Print start sensed.')
-                print('End of print will be sensed, and frames will be converted into video.')
-                print('Or, press Ctrl+C one time to move directly to conversion step.')
-                print('')
+                logger.info('Print start sensed.')
+                logger.info('End of print will be sensed, and frames will be converted into video.')
+                logger.info('Or, press Ctrl+C one time to move directly to conversion step.')
+                logger.info('')
                 printerState = 1
 
         elif (printerState == 1):   # Actually printing
@@ -364,12 +409,8 @@ try:
                 printerState = 2
 
         elif (printerState == 2):
-#            time.sleep(1)
-#            onePhoto()
-#            time.sleep(2)
-#            onePhoto()
             postProcess()
 except KeyboardInterrupt:
-    print('Stopped by Ctl+C - Post Processing')
+    logger.info('Stopped by Ctl+C - Post Processing')
     postProcess()
    
